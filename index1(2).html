@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Smart Plant Care</title>
+    <style>
+        /* --- THEME VARIABLES --- */
+        :root {
+            /* Default (Dark) */
+            --bg: #0b0f0d;
+            --panel: #141a16;
+            --text: #e8f2ea;
+            --muted: #8da394;
+            --accent: #40c463;
+            --accent-hover: #36a855;
+            --danger: #f85149;
+            --warn: #f0ad4e;
+            --good: #3fb950;
+            --border: #26332b;
+            --sidebar-bg: #111613;
+            --input-bg: #0b0f0d;
+            --msg-user: #1b472c;
+            --msg-ai: #1e2622;
+            --sensor-card-bg: #1a211d;
+        }
+
+        /* Light Theme Override */
+        [data-theme="light"] {
+            --bg: #f0f2f5;
+            --panel: #ffffff;
+            --text: #1a1a1a;
+            --muted: #65676b;
+            --accent: #2e7d32; /* Darker green for contrast on white */
+            --accent-hover: #1b5e20;
+            --danger: #d32f2f;
+            --warn: #ed6c02;
+            --good: #2e7d32;
+            --border: #e4e6eb;
+            --sidebar-bg: #ffffff;
+            --input-bg: #f0f2f5;
+            --msg-user: #d1e7dd; /* Light green tint */
+            --msg-ai: #f0f2f5;
+            --sensor-card-bg: #f7f8fa;
+        }
+
+        /* Adjust text colors for light mode specific elements if needed */
+        [data-theme="light"] .msg.user { color: #0f5132; }
+        [data-theme="light"] .msg.ai { color: #1a1a1a; border: 1px solid var(--border); }
+        [data-theme="light"] .sensor-val { color: #1a1a1a; }
+        [data-theme="light"] .brand-text h1 { color: #1a1a1a; }
+        [data-theme="light"] .panel-title { color: #1a1a1a; }
+
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Header */
+        .app-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 20px; 
+            background: var(--panel); /* Use panel color for header to match theme */
+            border-bottom: 1px solid var(--border); z-index: 100;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .brand { display: flex; gap: 12px; align-items: center; }
+        .brand-icon { font-size: 24px; }
+        .brand-text h1 { margin: 0; font-size: 18px; font-weight: 700; color: var(--text); }
+        .brand-text p { margin: 0; font-size: 12px; color: var(--accent); font-weight: 600; letter-spacing: 0.5px; }
+
+        .menu-btn {
+            background: none; border: none; color: var(--text);
+            font-size: 24px; cursor: pointer; padding: 4px;
+            display: flex; flex-direction: column; gap: 5px; width: 30px;
+        }
+        .menu-line { width: 100%; height: 2px; background: currentColor; border-radius: 2px; }
+
+        /* Sidebar (Left Side) */
+        .overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); z-index: 150; opacity: 0; pointer-events: none; transition: 0.3s;
+        }
+        .overlay.active { opacity: 1; pointer-events: auto; }
+
+        .sidebar {
+            position: fixed; top: 0; left: -320px; width: 300px; height: 100%;
+            background: var(--sidebar-bg); border-right: 1px solid var(--border);
+            z-index: 160; display: flex; flex-direction: column;
+            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s;
+            box-shadow: 5px 0 20px rgba(0,0,0,0.5);
+        }
+        .sidebar.active { left: 0; }
+
+        .sidebar-header {
+            padding: 20px; display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+        .close-btn { background: none; border: none; color: var(--muted); font-size: 28px; cursor: pointer; }
+
+        /* Tabs */
+        .tabs { display: flex; padding: 10px 20px 0; gap: 10px; border-bottom: 1px solid var(--border); }
+        .tab-btn {
+            flex: 1; background: none; border: none; color: var(--muted);
+            padding: 10px; cursor: pointer; font-weight: 600; border-bottom: 2px solid transparent;
+        }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+        .tab-content { padding: 20px; display: none; flex: 1; overflow-y: auto; }
+        .tab-content.active { display: block; }
+
+        /* Main Content - Grid Layout */
+        .main-content {
+            flex: 1; overflow-y: auto; padding: 20px;
+            display: grid; 
+            grid-template-columns: 400px 1fr; /* Sensors fixed width, Chat fills rest */
+            grid-template-rows: 1fr;
+            gap: 20px;
+            width: 100%;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 900px) {
+            .main-content {
+                display: flex; flex-direction: column; /* Stack on mobile */
+            }
+            .readings-grid { grid-template-columns: 1fr 1fr; }
+        }
+
+        /* Cards */
+        .panel {
+            background: var(--panel); border: 1px solid var(--border);
+            border-radius: 16px; padding: 20px; display: flex; flex-direction: column;
+            height: 100%; /* Fill height of grid cell */
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .panel-header { margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+        .panel-title { font-size: 18px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 10px; }
+        .panel-subtitle { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+        .readings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .sensor-card {
+            background: var(--sensor-card-bg); border: 1px solid var(--border);
+            border-radius: 12px; padding: 15px;
+            transition: background-color 0.3s;
+        }
+        .sensor-label { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; } /* Flex for icon alignment */
+        .sensor-val { font-size: 24px; font-weight: 700; margin-top: 8px; color: var(--text); }
+        .meter-bg { height: 6px; background: rgba(128,128,128,0.2); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+        .meter-fill { height: 100%; width: 0%; background: var(--accent); transition: 0.5s; }
+        .meter-fill.warn { background: var(--warn); }
+
+        /* Form & Buttons */
+        .form-group { margin-bottom: 15px; }
+        .form-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+        .form-input {
+            width: 100%; background: var(--input-bg); border: 1px solid var(--border); color: var(--text);
+            padding: 10px; border-radius: 8px; outline: none; transition: background-color 0.3s;
+        }
+        .btn {
+            width: 100%; padding: 12px; border-radius: 8px; border: none; font-weight: 600;
+            cursor: pointer; margin-top: 10px; text-transform: uppercase;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-hold {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white;
+            padding: 20px; font-size: 16px; box-shadow: 0 4px 0 #1d4ed8; margin-top: 20px;
+            touch-action: none; user-select: none;
+        }
+        .btn-hold:active { transform: translateY(4px); box-shadow: none; }
+        
+        /* Theme Toggle Button */
+        .theme-toggle {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px; background: var(--input-bg); border: 1px solid var(--border);
+            border-radius: 8px; cursor: pointer; margin-bottom: 15px;
+        }
+        .theme-toggle:hover { border-color: var(--accent); }
+        .theme-label { font-size: 14px; color: var(--text); font-weight: 500; }
+        .theme-icon { font-size: 18px; }
+
+        /* Chat */
+        .chat-box {
+            flex: 1; min-height: 300px; background: var(--sidebar-bg); border-radius: 12px;
+            border: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden;
+            transition: background-color 0.3s;
+        }
+        .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+        .msg { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 15px; line-height: 1.5; }
+        .msg.user { align-self: flex-end; background: var(--msg-user); color: var(--text); }
+        .msg.ai { align-self: flex-start; background: var(--msg-ai); border: 1px solid var(--border); color: var(--text); }
+        .input-area { display: flex; padding: 15px; gap: 12px; border-top: 1px solid var(--border); background: var(--panel); }
+        
+        .badge { padding: 4px 10px; border-radius: 20px; background: var(--border); font-size: 11px; color: var(--muted); }
+        .badge.ok { background: rgba(63,185,80,0.2); color: var(--good); }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="app-header">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <!-- Menu Button -->
+            <button id="menuBtn" class="menu-btn">
+                <div class="menu-line"></div><div class="menu-line"></div><div class="menu-line"></div>
+            </button>
+            <div class="brand">
+                <div class="brand-icon">🌿</div>
+                <div class="brand-text">
+                    <h1>Smart Plant Dashboard</h1>
+                    <p>Live Monitor</p>
+                </div>
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <span id="statusBadge" class="badge">Disconnected</span>
+        </div>
+    </header>
+
+    <!-- Sidebar -->
+    <div id="overlay" class="overlay"></div>
+    <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <span>Settings & Controls</span>
+            <button id="closeBtn" class="close-btn">×</button>
+        </div>
+        
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('conn')">Connection</button>
+            <button class="tab-btn" onclick="switchTab('thresh')">Thresholds</button>
+        </div>
+
+        <!-- Tab 1: Connection -->
+        <div id="tab-conn" class="tab-content active">
+            
+            <!-- Theme Switcher -->
+            <div class="form-label">APPEARANCE</div>
+            <div class="theme-toggle" id="themeBtn">
+                <span class="theme-label">Dark Mode</span>
+                <span class="theme-icon">🌙</span>
+            </div>
+
+            <form id="configForm">
+                <div class="form-group">
+                    <label class="form-label">ESP32 IP Address</label>
+                    <input id="baseUrl" type="url" class="form-input" placeholder="http://192.168.x.x" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Save IP</button>
+                <button type="button" id="togglePoll" class="btn" style="background:#2a352e; color:#fff; margin-top:10px">Start Polling</button>
+            </form>
+            
+            <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+            
+            <label class="form-label">MANUAL ACTIONS</label>
+            <button id="waterBurst" class="btn" style="background: var(--accent); color: #fff;">Water Once (3s)</button>
+            <button id="holdBtn" class="btn-hold">HOLD TO PUMP</button>
+        </div>
+
+        <!-- Tab 2: Thresholds -->
+        <div id="tab-thresh" class="tab-content">
+            <form id="threshForm">
+                <div class="form-group"><label class="form-label">Moisture Target %</label><input id="th_moist" type="number" class="form-input" value="45"></div>
+                <div class="form-group"><label class="form-label">Tank Min %</label><input id="th_water" type="number" class="form-input" value="40"></div>
+                <div class="form-group"><label class="form-label">Hum Min %</label><input id="th_hum_min" type="number" class="form-input" value="35"></div>
+                <div class="form-group"><label class="form-label">Hum Max %</label><input id="th_hum_max" type="number" class="form-input" value="70"></div>
+                <button type="submit" class="btn btn-primary">Update Rules</button>
+            </form>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Sensors (Left on Desktop) -->
+        <div class="panel">
+            <div id="tankAlert" class="badge hidden" style="background:rgba(248,81,73,0.2); color:var(--danger); width:100%; justify-content:center; padding:10px; margin-bottom: 15px;">⚠️ TANK EMPTY</div>
+
+            <div class="panel-header">
+                <div class="panel-title">📊 Live Readings</div>
+                <div class="panel-subtitle">Real-time sensor data</div>
+            </div>
+            <div class="readings-grid">
+                <div class="sensor-card">
+                    <div class="sensor-label"><span>🌡️</span> Temp</div>
+                    <div id="val-temp" class="sensor-val">-- °C</div>
+                </div>
+                <div class="sensor-card">
+                    <div class="sensor-label"><span>💧</span> Humidity</div>
+                    <div id="val-hum" class="sensor-val">-- %</div>
+                    <div class="meter-bg"><div id="bar-hum" class="meter-fill"></div></div>
+                </div>
+                <div class="sensor-card">
+                    <div class="sensor-label"><span>🌱</span> Soil</div>
+                    <div id="val-moist" class="sensor-val">-- %</div>
+                    <div class="meter-bg"><div id="bar-moist" class="meter-fill"></div></div>
+                </div>
+                <div class="sensor-card">
+                    <div class="sensor-label"><span>🔆</span> Light</div>
+                    <div id="val-light" class="sensor-val">-- %</div>
+                    <div class="meter-bg"><div id="bar-light" class="meter-fill"></div></div>
+                </div>
+            </div>
+            <div class="sensor-card" style="margin-top:15px">
+                <div class="sensor-label"><span>🌊</span> Plant Water Tank</div>
+                <div id="val-water" class="sensor-val">-- %</div>
+                <div class="meter-bg"><div id="bar-water" class="meter-fill"></div></div>
+            </div>
+        </div>
+
+        <!-- Chat (Right on Desktop) -->
+        <div class="panel" style="padding:0; overflow:hidden;">
+            <div class="panel-header" style="padding:20px; margin-bottom:0;">
+                <div class="panel-title">🤖 Plant Assistant</div>
+                <div class="panel-subtitle">AI-powered care advice</div>
+            </div>
+            <div class="chat-box" style="border:none; border-radius:0; background:transparent; flex:1;">
+                <div id="msgs" class="messages">
+                    <div class="msg ai">Hi! I'm your dedicated Plant Care Advisor. I'm ready to analyze your sensor data and help your plants thrive.</div>
+                </div>
+                <form id="chatForm" class="input-area">
+                    <input id="chatIn" type="text" class="form-input" placeholder="Ask something..." autocomplete="off">
+                    <button type="submit" style="background:var(--accent); border:none; width:44px; border-radius:50%; cursor:pointer; font-size: 18px;">➤</button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- 1. YOUR API KEY GOES HERE ---
+        const GEMINI_API_KEY = "AIzaSyAgCWsFJnUEuAuGEjWeSM6pJSMLPs9-yyE"; 
+        // ---------------------------------
+
+        let config = { baseUrl: "", interval: 2000 };
+        let pollTimer = null;
+        let lastData = null;
+
+        // --- UI Logic ---
+        const els = {
+            sidebar: document.getElementById('sidebar'),
+            overlay: document.getElementById('overlay'),
+            tabConn: document.getElementById('tab-conn'),
+            tabThresh: document.getElementById('tab-thresh'),
+            menuBtn: document.getElementById('menuBtn'),
+            closeBtn: document.getElementById('closeBtn'),
+            msgs: document.getElementById('msgs'),
+            themeBtn: document.getElementById('themeBtn')
+        };
+
+        // Sidebar & Tabs
+        els.menuBtn.onclick = () => { els.sidebar.classList.add('active'); els.overlay.classList.add('active'); };
+        const closeMenu = () => { els.sidebar.classList.remove('active'); els.overlay.classList.remove('active'); };
+        els.closeBtn.onclick = closeMenu;
+        els.overlay.onclick = closeMenu;
+
+        window.switchTab = (tab) => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            if(tab === 'conn') {
+                els.tabConn.classList.add('active');
+                document.querySelector('button[onclick="switchTab(\'conn\')"]').classList.add('active');
+            } else {
+                els.tabThresh.classList.add('active');
+                document.querySelector('button[onclick="switchTab(\'thresh\')"]').classList.add('active');
+            }
+        };
+
+        // Theme Logic
+        const toggleTheme = () => {
+            const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+            const newTheme = isLight ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            
+            const label = els.themeBtn.querySelector('.theme-label');
+            const icon = els.themeBtn.querySelector('.theme-icon');
+            label.textContent = newTheme === 'light' ? 'Light Mode' : 'Dark Mode';
+            icon.textContent = newTheme === 'light' ? '☀️' : '🌙';
+        };
+
+        // Init Theme
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        els.themeBtn.querySelector('.theme-label').textContent = savedTheme === 'light' ? 'Light Mode' : 'Dark Mode';
+        els.themeBtn.querySelector('.theme-icon').textContent = savedTheme === 'light' ? '☀️' : '🌙';
+        els.themeBtn.onclick = toggleTheme;
+
+        // Config Load/Save
+        try {
+            const saved = JSON.parse(localStorage.getItem("plant_dash_v4"));
+            if(saved) config = {...config, ...saved};
+            document.getElementById('baseUrl').value = config.baseUrl;
+        } catch {}
+
+        document.getElementById('configForm').onsubmit = (e) => {
+            e.preventDefault();
+            config.baseUrl = document.getElementById('baseUrl').value.replace(/\/+$/, "");
+            localStorage.setItem("plant_dash_v4", JSON.stringify(config));
+            alert("IP Saved");
+        };
+
+        // Polling
+        const setStatus = (s, k) => {
+            const b = document.getElementById('statusBadge');
+            b.textContent = s; b.className = `badge ${k}`;
+        };
+
+        document.getElementById('togglePoll').onclick = () => {
+            if(pollTimer) {
+                clearInterval(pollTimer); pollTimer = null;
+                setStatus("Stopped", "");
+                document.getElementById('togglePoll').textContent = "Start Polling";
+            } else {
+                if(!config.baseUrl) return alert("Set IP first");
+                pollSensors();
+                pollTimer = setInterval(pollSensors, config.interval);
+                setStatus("Live", "ok");
+                document.getElementById('togglePoll').textContent = "Stop Polling";
+            }
+        };
+
+        async function pollSensors() {
+            try {
+                const res = await fetch(`${config.baseUrl}/sensors`, { signal: AbortSignal.timeout(3000) });
+                const data = await res.json();
+                lastData = data;
+                updateUI(data);
+            } catch(e) { setStatus("Error", ""); }
+        }
+
+        function updateUI(d) {
+            const set = (id, v, u) => document.getElementById(id).textContent = `${v.toFixed(0)} ${u}`;
+            const bar = (id, v) => {
+                const el = document.getElementById(id);
+                el.style.width = `${Math.min(100, v)}%`;
+                el.className = `meter-fill ${v<30 ? 'warn':''}`;
+            };
+            set('val-temp', d.temperature, "°C");
+            set('val-hum', d.humidity, "%");
+            set('val-moist', d.moisture, "%");
+            set('val-light', d.light, "%");
+            set('val-water', d.water, "%");
+            
+            bar('bar-hum', d.humidity);
+            bar('bar-moist', d.moisture);
+            bar('bar-light', d.light);
+            bar('bar-water', d.water);
+            
+            document.getElementById('tankAlert').classList.toggle('hidden', !d.tank_empty_warning);
+        }
+
+        // Control Logic
+        const send = (ep) => {
+            if(!config.baseUrl) return;
+            fetch(`${config.baseUrl}${ep}`, { method: 'POST' }).catch(console.error);
+        };
+
+        document.getElementById('waterBurst').onclick = () => send('/water');
+        
+        const holdBtn = document.getElementById('holdBtn');
+        const startHold = (e) => { e.preventDefault(); holdBtn.style.transform="translateY(4px)"; send('/water/start'); };
+        const stopHold = (e) => { e.preventDefault(); holdBtn.style.transform="translateY(0)"; send('/water/stop'); };
+        
+        holdBtn.onmousedown = startHold; holdBtn.onmouseup = stopHold; holdBtn.onmouseleave = stopHold;
+        holdBtn.ontouchstart = startHold; holdBtn.ontouchend = stopHold;
+
+        // Chat Logic
+        const addMsg = (role, txt) => {
+            const d = document.createElement('div');
+            d.className = `msg ${role}`; d.textContent = txt;
+            els.msgs.appendChild(d); els.msgs.scrollTop = els.msgs.scrollHeight;
+        };
+
+        document.getElementById('chatForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const inp = document.getElementById('chatIn');
+            const txt = inp.value.trim();
+            if(!txt) return;
+            
+            addMsg('user', txt);
+            inp.value = "";
+            
+            if(GEMINI_API_KEY === "PASTE_YOUR_GEMINI_KEY_HERE") {
+                return addMsg('ai', "❌ Error: You forgot to paste your API key in line 430 of the HTML file.");
+            }
+
+            const ctx = lastData ? `Readings: Temp ${lastData.temperature}, Hum ${lastData.humidity}, Soil ${lastData.moisture}, Light ${lastData.light}` : "No sensor data yet.";
+            const prompt = `Role: Plant Expert. Context: ${ctx}. User: ${txt}`;
+
+            try {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                const json = await res.json();
+                addMsg('ai', json.candidates?.[0]?.content?.parts?.[0]?.text || "Error.");
+            } catch(e) { addMsg('ai', "Network Error"); }
+        };
+    </script>
+</body>
+</html>
